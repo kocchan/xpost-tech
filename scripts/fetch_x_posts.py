@@ -440,12 +440,24 @@ def _normalize_x_tweet(node: dict, fallback_handle: str) -> dict | None:
     note = node.get("note_tweet", {}).get("note_tweet_results", {}).get("result", {})
     text = (note.get("text") if note else None) or legacy.get("full_text", "")
 
-    # メディア
+    # 画像 / 動画サムネ URL (legacy.entities.media — 画像と動画両方ここに出る)
     media_urls = [
         m.get("media_url_https") or m.get("expanded_url")
         for m in (legacy.get("entities", {}).get("media") or [])
         if m.get("media_url_https") or m.get("expanded_url")
     ]
+
+    # 動画本体 (extended_entities.media[].video_info.variants から bitrate 最大の mp4 を選ぶ)
+    video_urls: list[str] = []
+    for m in (legacy.get("extended_entities", {}).get("media") or []):
+        if m.get("type") not in ("video", "animated_gif"):
+            continue
+        variants = (m.get("video_info") or {}).get("variants") or []
+        mp4s = [v for v in variants if v.get("content_type") == "video/mp4" and v.get("url")]
+        if not mp4s:
+            continue
+        best = max(mp4s, key=lambda v: int(v.get("bitrate") or 0))
+        video_urls.append(best["url"])
 
     # 時刻("Tue Apr 03 12:34:56 +0000 2026" 形式 → ISO)
     iso_time = None
@@ -501,6 +513,7 @@ def _normalize_x_tweet(node: dict, fallback_handle: str) -> dict | None:
         "views": int(views_obj.get("count", 0) or 0),
         "bookmarks": int(legacy.get("bookmark_count", 0) or 0),
         "media_urls": media_urls,
+        "video_urls": video_urls,
         "is_reply": bool(in_reply_id),
         "is_self_reply": bool(in_reply_screen and in_reply_screen.lower() == (username or "").lower()),
         "is_retweet": bool(rt_node),

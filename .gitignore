@@ -12,6 +12,9 @@ __pycache__/
 # tweety session files (contain auth_token / ct0 in plaintext!)
 *.tw_session
 
+# Downloaded reference videos (large, local-only — never commit)
+output/raw/*/media/
+
 # Claude Code local-only settings (project-shared settings.json は別途必要なら追加)
 .claude/settings.local.json
 

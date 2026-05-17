@@ -136,6 +136,14 @@ def build_blocks(item: dict, source: dict | None, idx: int, total: int) -> list[
                     "type": "context",
                     "elements": [{"type": "mrkdwn", "text": f":movie_camera: メディア: <{url}>"}],
                 })
+        # 動画 mp4 直リンク (download_media.py でローカル保存可)
+        videos = source.get("video_urls", []) or []
+        if videos:
+            video_lines = "\n".join(f":movie_camera: 動画 mp4: <{u}>" for u in videos[:4])
+            blocks.append({
+                "type": "context",
+                "elements": [{"type": "mrkdwn", "text": video_lines}],
+            })
     blocks.append({"type": "divider"})
     return blocks
 
