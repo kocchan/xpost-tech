@@ -1,28 +1,22 @@
-name: 02 Rewrite (GitHub Actions fallback)
+name: 02 Rewrite (Claude Sonnet 4.6)
 
-# Claude routine を 8:30 に走らせる前提だが、routine が動かない/止まっているときの
-# 保険として、この workflow を 8:45 (UTC 23:45) に走らせる。
-# routine が成功して posts.md が既に存在する日はスキップする。
-#
-# routine を使わずに GitHub Actions に一本化したい場合は、Claude routine を登録せず
-# この workflow だけ有効にすればよい。
+# 毎朝 JST 8:30 (UTC 23:30 前日) に raw_posts.json から Top 10 を選び、
+# Claude Sonnet 4.6 でリライトして output/rewrites/<yesterday>/posts.md として commit する。
 #
 # 必要な Secrets:
 #   ANTHROPIC_API_KEY : Claude API キー
+#
+# 手動実行も可 (workflow_dispatch、target_date を任意指定)。
 
 on:
   schedule:
-    - cron: "45 23 * * *"  # UTC 23:45 = JST 翌日 8:45
+    - cron: "30 23 * * *"  # UTC 23:30 = JST 翌日 8:30
   workflow_dispatch:
     inputs:
       target_date:
         description: "対象日 YYYY-MM-DD (空欄なら yesterday=JST 昨日)"
         required: false
         default: ""
-      force:
-        description: "既に posts.md があっても上書きする"
-        required: false
-        default: "false"
 
 permissions:
   contents: write
@@ -60,20 +54,10 @@ jobs:
           fi
           echo "target_date=$TD" >> "$GITHUB_OUTPUT"
 
-      - name: Skip if posts.md already exists
-        id: check
-        run: |
-          MD="output/rewrites/${{ steps.date.outputs.target_date }}/posts.md"
-          FORCE="${{ github.event.inputs.force }}"
-          if [ -f "$MD" ] && [ "$FORCE" != "true" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "[skip] $MD already exists (Claude routine が先に書いた可能性)"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Pull latest (collect の commit を取りに行く)
+        run: git pull --rebase || true
 
       - name: Run rewrite
-        if: steps.check.outputs.skip != 'true'
         run: |
           python3 scripts/rewrite_top.py \
               --raw-root output/raw \
@@ -82,11 +66,9 @@ jobs:
               --top 10
 
       - name: Commit and push
-        if: steps.check.outputs.skip != 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase || true
           git add output/rewrites/
           if git diff --staged --quiet; then
             echo "no changes to commit"

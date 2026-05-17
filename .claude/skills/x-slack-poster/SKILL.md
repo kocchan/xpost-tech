@@ -12,11 +12,11 @@ X への投稿は人間が手動で行う(完全自動化は採用しない)。
 ## パイプライン上の位置
 
 ```
-[x-collecter] (JST 8:00 / GitHub Actions)
+[x-collecter]   (JST 8:00 / GitHub Actions)
        ↓ output/raw/<日付>/raw_posts.json
-[rewrite_top.py] (JST 8:30 / Claude routine、フォールバック GitHub Actions 8:45)
+[rewrite_top]   (JST 8:30 / GitHub Actions 02-rewrite.yml)
        ↓ output/rewrites/<日付>/posts.md
-[notify_slack.py] (JST 9:00 / GitHub Actions)
+[notify_slack]  (JST 9:00 / GitHub Actions 03-slack.yml)
        ↓
 Slack(リライト案 + 元投稿 URL + 画像インライン表示)
        ↓
@@ -27,8 +27,8 @@ Slack(リライト案 + 元投稿 URL + 画像インライン表示)
 
 | スクリプト | 役割 | 実行主体 |
 |---|---|---|
-| `scripts/rewrite_top.py` | Top N をリライトして `output/rewrites/<日付>/posts.md` に保存 | Claude routine(本番) / GitHub Actions(フォールバック) / ローカル |
-| `scripts/notify_slack.py` | `posts.md` と元 `raw_posts.json` を読んで Slack に画像付きで送信 | GitHub Actions(本番) / ローカル |
+| `scripts/rewrite_top.py` | Top N をリライトして `output/rewrites/<日付>/posts.md` に保存 | GitHub Actions `02-rewrite.yml` / ローカル |
+| `scripts/notify_slack.py` | `posts.md` と元 `raw_posts.json` を読んで Slack に画像付きで送信 | GitHub Actions `03-slack.yml` / ローカル |
 
 ## モデルとパラメータ
 
@@ -43,9 +43,7 @@ Slack(リライト案 + 元投稿 URL + 画像インライン表示)
 
 ### 1. リライト (rewrite_top.py)
 
-**本番(Claude routine 経由)**: 毎朝 JST 8:30 に routine が `rewrite_top.py --target-date yesterday --top 10` を実行し、posts.md を commit + push する。詳細は [SETUP.md](../../../SETUP.md) を参照。
-
-**フォールバック GitHub Actions**: `.github/workflows/02-rewrite.yml` が JST 8:45 に走り、posts.md が無ければ生成する。
+**本番**: `.github/workflows/02-rewrite.yml` が毎朝 JST 8:30 に `--target-date yesterday --top 10` で実行 → posts.md を commit + push。
 
 **ローカル手動**:
 

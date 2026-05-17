@@ -1,7 +1,7 @@
 # xpost-tech プロジェクト概要
 
 **作成日**: 2026-05-17(ピボット時)
-**最終更新**: 2026-05-17(GitHub Actions + Claude routine による自動化対応)
+**最終更新**: 2026-05-17(GitHub Actions 一本化に変更、Claude routine は不採用)
 **リポジトリ**: <https://github.com/kocchan/xpost-tech>
 
 ## ゴール
@@ -15,9 +15,8 @@ AI 副業ジャンルで X (旧 Twitter) アカウントを運用し、競合の
 JST 08:00 ─ GitHub Actions 01-collect.yml ─ X から「JST 昨日」の投稿を収集
                                              ↓ output/raw/<yesterday>/raw_posts.json (commit)
 
-JST 08:30 ─ Claude routine ─────────────── Sonnet 4.6 で Top 10 をリライト
+JST 08:30 ─ GitHub Actions 02-rewrite.yml ─ Sonnet 4.6 で Top 10 をリライト
                                              ↓ output/rewrites/<yesterday>/posts.md (commit)
-JST 08:45 ─ GitHub Actions 02-rewrite.yml ─ 保険(routine 失敗時に走る)
 
 JST 09:00 ─ GitHub Actions 03-slack.yml ── posts.md + raw_posts.json を Slack に投稿
                                              ↓
@@ -30,7 +29,7 @@ JST 09:00 ─ GitHub Actions 03-slack.yml ── posts.md + raw_posts.json を S
 
 - **収集** と **リライト** と **通知** を分けると、どの段階で失敗したかが GitHub Actions のログから一目で分かる
 - 中間生成物(`raw_posts.json` / `posts.md`)が git に残るので、後から見直し・やり直しが楽
-- リライトだけ Claude routine が担当することで、Claude Pro/Max サブスクの利用枠を活かしつつ API キー節約
+- 各ステップを GitHub UI から個別に手動キックできるので、デバッグも簡単
 
 ## コスト
 
@@ -39,10 +38,9 @@ JST 09:00 ─ GitHub Actions 03-slack.yml ── posts.md + raw_posts.json を S
 | GitHub Actions(public repo) | 無料 |
 | GitHub Actions(private repo) | 月 2000 分まで無料(本パイプラインは 1 日 5 分未満) |
 | Claude API (Sonnet 4.6, 10 件/日) | 月 10 円未満 |
-| Claude routine | Claude Pro/Max サブスク内(追加課金なし) |
 | Slack webhook | 無料 |
 
-→ 既にサブスクに入っていれば実質 **追加課金 0 円**。
+→ 追加月額は Claude API の数円〜数十円のみ。サブスクや固定費は一切不要。
 
 ## ファイル構成
 
@@ -50,7 +48,7 @@ JST 09:00 ─ GitHub Actions 03-slack.yml ── posts.md + raw_posts.json を S
 xpost-tech/
 ├── .github/workflows/
 │   ├── 01-collect.yml          ← JST 8:00 収集
-│   ├── 02-rewrite.yml          ← JST 8:45 リライト(routine の保険)
+│   ├── 02-rewrite.yml          ← JST 8:30 Sonnet 4.6 リライト
 │   └── 03-slack.yml            ← JST 9:00 Slack 通知
 ├── scripts/                    ← 実行スクリプト本体 (GitHub Actions / ローカル両方から叩く)
 │   ├── fetch_x_posts.py        ← Cookie 環境変数 + --target-date 対応
@@ -107,7 +105,6 @@ Slack 通知では元投稿のメディア URL を image ブロックで埋め�
 
 - **Cookie 失効**: `X_AUTH_TOKEN` / `X_CT0` は数週間〜数ヶ月で失効する。01-collect.yml が 401/403 で失敗したら GitHub Secrets を手動更新
 - **rate limit**: 11 アカウント × 15 秒 sleep = 約 3 分。X の限界には余裕で収まる
-- **routine の信頼性**: Claude routine が確実に走らない場合は 02-rewrite.yml だけ有効にして、Claude routine を登録しない構成にもできる
 
 ## 関連 Skill / ドキュメント
 
