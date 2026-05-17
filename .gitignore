@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local secrets
+.env
+.env.*
+
+# Claude Code local-only settings (project-shared settings.json は別途必要なら追加)
+.claude/settings.local.json
+
+# OS
+.DS_Store

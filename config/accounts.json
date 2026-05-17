@@ -1,0 +1,63 @@
+{
+  "_comment": "収集対象の X アカウントリスト。handle は @ なし。category は core / business / major / side_hustle 等の自由ラベル。since_days を省略すると期間フィルタなし(=直近 limit 件)。",
+  "defaults": {
+    "limit": 30
+  },
+  "accounts": [
+    {
+      "handle": "SuguruKun_ai",
+      "category": "core",
+      "note": "すぐる / Uravation 代表 / 約10万フォロワー / 『AIエージェント仕事術』著者"
+    },
+    {
+      "handle": "so_ainsight",
+      "category": "core",
+      "note": "そう / n8n × Claude Code の自動化発信"
+    },
+    {
+      "handle": "dify_base",
+      "category": "core",
+      "note": "AX Base(旧 Dify Base)/ Claude Code 個別指導"
+    },
+    {
+      "handle": "0x__tom",
+      "category": "business",
+      "note": "Tom / ドバイ生成 AI / Dify コミュニティ"
+    },
+    {
+      "handle": "masahirochaen",
+      "category": "major",
+      "note": "チャエン / デジライズ CEO / AI ニュース最速発信"
+    },
+    {
+      "handle": "satori_sz9",
+      "category": "major",
+      "note": "さとり / 7万超フォロワー / 体系化が強い"
+    },
+    {
+      "handle": "Naoki_GPT",
+      "category": "side_hustle",
+      "note": "なおき / AIと創る人 / Claude Code × 副業アフィ / SHIFT AI 講師 / note 商材販売の典型"
+    },
+    {
+      "handle": "ai_jitan",
+      "category": "side_hustle",
+      "note": "えーたん / 約3.9万 / NotebookLM・Claude Code Skills の時短発信 / プロンプト無料配布で伸ばす王道型"
+    },
+    {
+      "handle": "akaoniudetate",
+      "category": "side_hustle",
+      "note": "なまお / 「副業ゼロから100万円」3ステップ系の代表 / ロードマップ実況"
+    },
+    {
+      "handle": "develogon0",
+      "category": "side_hustle",
+      "note": "デベロゴン / ChatGPT 中心の AI 自動化 / 『Claude Code 不要論』など逆張りで差別化"
+    },
+    {
+      "handle": "kaneki_ai888",
+      "category": "side_hustle",
+      "note": "金木 / AI 副業 / 『Claude Code にこれ聞くだけ』型の超具体ハック投稿"
+    }
+  ]
+}

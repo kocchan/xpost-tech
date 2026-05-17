@@ -1,0 +1,78 @@
+name: 01 Collect (X yesterday's posts)
+
+# 毎朝 JST 8:00 (UTC 23:00 前日) に X の指定アカウントから「JST 昨日」の投稿を取得し、
+# output/raw/<yesterday>/raw_posts.json として commit する。
+#
+# 必要な Secrets:
+#   X_AUTH_TOKEN  : X (Twitter) の auth_token クッキー
+#   X_CT0         : X (Twitter) の ct0 クッキー
+#
+# 手動実行も可 (workflow_dispatch、target_date を任意指定)。
+
+on:
+  schedule:
+    - cron: "0 23 * * *"  # UTC 23:00 = JST 翌日 8:00
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: "対象日 YYYY-MM-DD (空欄なら yesterday=JST 昨日)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write  # raw_posts.json を commit するため
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      X_AUTH_TOKEN: ${{ secrets.X_AUTH_TOKEN }}
+      X_CT0: ${{ secrets.X_CT0 }}
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install httpx
+
+      - name: Resolve target date (yesterday in JST if empty)
+        id: date
+        run: |
+          INPUT="${{ github.event.inputs.target_date }}"
+          if [ -z "$INPUT" ]; then
+            TD=$(TZ=Asia/Tokyo date -d "yesterday" +%Y-%m-%d)
+          else
+            TD="$INPUT"
+          fi
+          echo "target_date=$TD" >> "$GITHUB_OUTPUT"
+          echo "[target-date] $TD"
+
+      - name: Fetch X posts for target date
+        run: |
+          python3 .claude/skills/x-collecter/scripts/fetch_x_posts.py \
+              --config config/accounts.json \
+              --target-date "${{ steps.date.outputs.target_date }}" \
+              --limit 100 \
+              --out-dir output/raw
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output/raw/
+          if git diff --staged --quiet; then
+            echo "no changes to commit"
+            exit 0
+          fi
+          git commit -m "collect: X posts for ${{ steps.date.outputs.target_date }} (JST)"
+          git push

@@ -1,0 +1,60 @@
+name: 03 Notify Slack
+
+# 毎朝 JST 9:00 (UTC 0:00) に output/rewrites/<yesterday>/posts.md と
+# output/raw/<yesterday>/raw_posts.json を読んで Slack Webhook に送る。
+#
+# 必要な Secrets:
+#   SLACK_WEBHOOK_URL : Slack incoming webhook URL
+#
+# 手動実行も可 (workflow_dispatch、target_date を任意指定)。
+
+on:
+  schedule:
+    - cron: "0 0 * * *"  # UTC 00:00 = JST 9:00
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: "対象日 YYYY-MM-DD (空欄なら yesterday=JST 昨日)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slack
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve target date (yesterday in JST if empty)
+        id: date
+        run: |
+          INPUT="${{ github.event.inputs.target_date }}"
+          if [ -z "$INPUT" ]; then
+            TD=$(TZ=Asia/Tokyo date -d "yesterday" +%Y-%m-%d)
+          else
+            TD="$INPUT"
+          fi
+          echo "target_date=$TD" >> "$GITHUB_OUTPUT"
+          echo "[target-date] $TD"
+
+      - name: Notify Slack
+        run: |
+          python3 .claude/skills/x-slack-poster/scripts/notify_slack.py \
+              --raw-root output/raw \
+              --rewrite-root output/rewrites \
+              --target-date "${{ steps.date.outputs.target_date }}"
