@@ -3,8 +3,9 @@ name: 03 Notify Slack
 # 毎朝 JST 9:00 (UTC 0:00) に output/rewrites/<yesterday>/posts.md と
 # output/raw/<yesterday>/raw_posts.json を読んで Slack Webhook に送る。
 #
-# 必要な Secrets:
-#   SLACK_WEBHOOK_URL : Slack incoming webhook URL
+# 必要な Secrets (どちらか必須。Bot Token を推奨):
+#   SLACK_BOT_TOKEN + SLACK_CHANNEL_ID : メイン投稿 + スレッド返信形式で投稿 (推奨)
+#   SLACK_WEBHOOK_URL                  : 1 リライト=1 メッセージのフォールバック
 #
 # 手動実行も可 (workflow_dispatch、target_date を任意指定)。
 
@@ -30,6 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - name: Check out repo
