@@ -273,7 +273,7 @@ def fetch_posts(
             tweets: list[dict] = []
             seen_ids: set[str] = set()
             cursor = None
-            consecutive_empty_pages = 0
+            consecutive_no_progress = 0
             max_pages = max(8, limit // 5)
             page_count = 0
             while len(tweets) < limit and page_count < max_pages:
@@ -326,6 +326,7 @@ def fetch_posts(
                 stop = False
                 added = 0
                 filtered_too_new = 0
+                filtered_too_old = 0
                 for t in page_tweets:
                     if t["id"] in seen_ids:
                         continue
@@ -334,12 +335,15 @@ def fetch_posts(
                         try:
                             t_dt = datetime.fromisoformat(t["time"].replace("Z", "+00:00"))
                             if upper and t_dt >= upper:
-                                # target date より新しい投稿はスキップ(窓に届くまでページングを続ける)
+                                # 窓より新しい投稿(pin で先頭に来る今日の投稿など)はスキップ
                                 filtered_too_new += 1
                                 continue
                             if cutoff and t_dt < cutoff:
-                                stop = True
-                                break
+                                # 窓より古い投稿(pin で先頭に来る数ヶ月前の投稿など)もスキップ。
+                                # 注意: X の UserTweets は pinned tweet を先頭に固定するため
+                                # 「古い投稿に当たったら break」してはいけない(順序が乱れる)。
+                                filtered_too_old += 1
+                                continue
                         except ValueError:
                             pass
                     tweets.append(t)
@@ -348,14 +352,14 @@ def fetch_posts(
                         stop = True
                         break
 
-                # 「全部 too-new でスキップ」されたページは「窓へ向かってスクロール中」なので
-                # consecutive_empty にはカウントしない(target-date モードでアクティブアカウントを
-                # 取りこぼさないため)
+                # ページ全体が too-old だけ(added=0, too_new=0, too_old>0)= 窓を通り過ぎたサイン。
+                # added=0 AND filtered_*=0 = タイムライン終端。
+                # too_new だけの場合は「窓に向かってスクロール中」なのでカウントしない。
                 if added == 0 and filtered_too_new == 0:
-                    consecutive_empty_pages += 1
+                    consecutive_no_progress += 1
                 else:
-                    consecutive_empty_pages = 0
-                if stop or not next_cursor or consecutive_empty_pages >= 3:
+                    consecutive_no_progress = 0
+                if stop or not next_cursor or consecutive_no_progress >= 3:
                     break
 
             results[handle] = tweets[:limit]
