@@ -33,6 +33,38 @@ load_dotenv()  # ローカル実行時に .env を読む。GitHub Actions では
 MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 1024
 
+# 関連度 / 質を判定するモデル。Sonnet 4.6 は Haiku より AI 副業 vs 周辺ニュース
+# のニュアンス判定が安定するため採用。日 80 件で約 3 円。
+CLASSIFY_MODEL = "claude-sonnet-4-6"
+CLASSIFY_MAX_TOKENS = 256
+
+CLASSIFY_SYSTEM = """あなたは「AI 副業」ジャンルの X 運用アシスタント。元ツイートを 2 軸で採点する。
+
+# relevance (0-5) — AI 副業との関連度
+- 5: AI ツールで副業 / フリーランス / 収益化した具体例・手順・実績
+- 4: AI 副業者向けの心得・マインドセット・始め方
+- 3: AI による業務効率化(副業に転用できる温度感)
+- 2: AI モデル/ニュース紹介(副業との接点は薄い)
+- 1: AI 以外のキャリア・副業・自己啓発
+- 0: 完全に無関係(雑談・愚痴・個人ニュース)
+
+# quality (0-5) — リライト素材としての質
+- 5: 強いフック + 具体例(数字 / ステップ / 比較) + 結論。型として優秀
+- 4: 主張と具体性が両立している
+- 3: 平均的な発信
+- 2: 抽象的で具体例が薄い、文章として弱い
+- 1: 宣伝 / 告知 / 露骨な煽り / フォロー誘導のみ
+- 0: 断片 / 文字化け / 意味不明
+
+# 出力
+1 行の JSON のみ。前置きやコードフェンスは禁止。
+{"relevance": <int>, "quality": <int>, "reason": "<20字程度の理由>"}"""
+
+CLASSIFY_USER_TEMPLATE = """次のツイートを採点:
+---
+{text}
+---"""
+
 SYSTEM_PROMPT = """あなたは「AI 副業」ジャンルで X (旧 Twitter) アカウントを運営する日本人マーケターのライターです。
 
 タスク:
@@ -71,22 +103,101 @@ def engagement_score(p: dict) -> int:
     )
 
 
-def pick_top(raw: dict, top_n: int) -> list[dict]:
-    """raw_posts.json を flatten してスコア順に Top N。
+def _flatten(raw: dict) -> list[dict]:
+    """raw を flatten してフィルタ前の候補リストを返す。
 
-    - RT は対象 (引用元のオリジナル本文を素材化)
-    - セルフリプライは対象 (自分のセルフスレッドの各ツイートを素材化)
-    - 他人へのリプライは除外 (会話の断片でリライト素材として薄い)
-    - 引用ツイートは対象
+    - 他人へのリプライは除外(会話断片はリライト素材にならない)
+    - 本文が空 / 数文字しかないものは除外
+    - RT・セルフリプライ・引用はリライト対象として残す
     """
     flat = []
     for posts in raw.values():
         for p in posts:
             if p.get("is_reply") and not p.get("is_self_reply"):
                 continue
+            text = (p.get("text") or "").strip()
+            if len(text) < 20:
+                continue
             flat.append(p)
+    return flat
+
+
+def classify_post(client: anthropic.Anthropic, post: dict) -> dict:
+    """Haiku 4.5 で relevance / quality を採点。失敗時は 0/0。"""
+    try:
+        response = client.messages.create(
+            model=CLASSIFY_MODEL,
+            max_tokens=CLASSIFY_MAX_TOKENS,
+            thinking={"type": "disabled"},
+            system=[
+                {
+                    "type": "text",
+                    "text": CLASSIFY_SYSTEM,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[
+                {
+                    "role": "user",
+                    "content": CLASSIFY_USER_TEMPLATE.format(text=post.get("text", "")),
+                }
+            ],
+        )
+        text = next((b.text for b in response.content if b.type == "text"), "").strip()
+        # 念のためコードフェンス対応
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.lower().startswith("json"):
+                text = text[4:]
+            text = text.strip()
+        return json.loads(text)
+    except (anthropic.APIError, json.JSONDecodeError, ValueError) as e:
+        return {"relevance": 0, "quality": 0, "reason": f"parse-error: {type(e).__name__}"}
+
+
+def pick_top(
+    raw: dict,
+    top_n: int,
+    client: anthropic.Anthropic | None = None,
+    min_relevance: int = 3,
+    min_quality: int = 3,
+) -> list[dict]:
+    """エンゲージメント順 → Haiku 4.5 で関連度+質を採点 → 閾値以上を Top N。
+
+    client=None ならフィルタ無しでスコア順 Top N(後方互換)。
+    候補は cost 抑制のため上位 max(top_n*4, 40) に絞ってから採点。
+    """
+    flat = _flatten(raw)
     flat.sort(key=engagement_score, reverse=True)
-    return flat[:top_n]
+
+    if client is None:
+        return flat[:top_n]
+
+    # Haiku 4.5 のコストは 80 件で 1 円未満なので、候補は思い切って全件まで広げる。
+    # 上限を設けるのは「明らかに低エンゲージで採点する価値がない」帯を切るとき用。
+    pool_size = max(top_n * 10, len(flat))
+    candidates = flat[:pool_size]
+    print(
+        f"[classify] {len(candidates)} 件 → Haiku 4.5 で relevance>={min_relevance} / quality>={min_quality} を抽出",
+        file=sys.stderr,
+    )
+
+    kept: list[dict] = []
+    for p in candidates:
+        cls = classify_post(client, p)
+        p["_classification"] = cls
+        rel = int(cls.get("relevance", 0) or 0)
+        qua = int(cls.get("quality", 0) or 0)
+        tag = f"r={rel} q={qua}"
+        if rel >= min_relevance and qua >= min_quality:
+            kept.append(p)
+            print(f"  [keep] @{p.get('author')} {tag} ({cls.get('reason')})", file=sys.stderr)
+        else:
+            print(f"  [drop] @{p.get('author')} {tag} ({cls.get('reason')})", file=sys.stderr)
+        if len(kept) >= top_n:
+            break
+
+    return kept[:top_n]
 
 
 def rewrite_one(client: anthropic.Anthropic, post: dict) -> str:
@@ -129,7 +240,11 @@ def build_markdown(target_date: str, items: list[dict]) -> str:
         media_block = ""
         if media:
             media_block = "\n**元投稿のメディア (参考用):**\n" + "\n".join(f"- {u}" for u in media) + "\n"
-        lines.append(f"## {i}. score={engagement_score(post)} / {post.get('author','?')}")
+        cls = post.get("_classification") or {}
+        cls_tag = ""
+        if cls:
+            cls_tag = f" / r={cls.get('relevance','?')} q={cls.get('quality','?')} ({cls.get('reason','')})"
+        lines.append(f"## {i}. score={engagement_score(post)} / {post.get('author','?')}{cls_tag}")
         lines.append("")
         lines.append("**リライト案:**")
         lines.append("```")
@@ -151,6 +266,13 @@ def main():
     ap.add_argument("--rewrite-root", default="output/rewrites", help="posts.md の出力ルート")
     ap.add_argument("--target-date", required=True, help="YYYY-MM-DD または 'yesterday'(JST)")
     ap.add_argument("--top", type=int, default=10, help="リライト対象の上位件数 (default: 10)")
+    ap.add_argument("--min-relevance", type=int, default=3, help="AI 副業関連度の最低スコア 0-5 (default: 3)")
+    ap.add_argument("--min-quality", type=int, default=3, help="素材としての質の最低スコア 0-5 (default: 3)")
+    ap.add_argument(
+        "--no-classify",
+        action="store_true",
+        help="関連度/質フィルタを無効化(従来のスコア順 Top N に戻す)",
+    )
     args = ap.parse_args()
 
     target_date = args.target_date
@@ -168,12 +290,20 @@ def main():
     with open(raw_path, encoding="utf-8") as f:
         raw = json.load(f)
 
-    top = pick_top(raw, args.top)
+    client = anthropic.Anthropic()
+    top = pick_top(
+        raw,
+        args.top,
+        client=None if args.no_classify else client,
+        min_relevance=args.min_relevance,
+        min_quality=args.min_quality,
+    )
     if not top:
-        sys.exit(f"対象投稿がありません ({raw_path} に RT/reply 以外で 0 件)")
+        sys.exit(
+            f"対象投稿がありません ({raw_path} に閾値以上のものなし。--min-relevance / --min-quality を下げて再試行)"
+        )
 
     print(f"[mode: model={MODEL} / top={len(top)} / target={target_date}]", file=sys.stderr)
-    client = anthropic.Anthropic()
 
     items = []
     for i, post in enumerate(top, start=1):
