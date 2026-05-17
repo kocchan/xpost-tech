@@ -8,11 +8,11 @@ Slack 通知はしない(別スクリプト notify_slack.py の役割)。
 
 使用例:
     # 昨日 JST の raw を Top 10 リライト
-    python3 .claude/skills/x-slack-poster/scripts/rewrite_top.py \
+    python3 scripts/rewrite_top.py \
         --raw-root output/raw --rewrite-root output/rewrites --target-date yesterday --top 10
 
     # 特定日
-    python3 .claude/skills/x-slack-poster/scripts/rewrite_top.py \
+    python3 scripts/rewrite_top.py \
         --raw-root output/raw --rewrite-root output/rewrites --target-date 2026-05-16 --top 10
 
 環境変数:

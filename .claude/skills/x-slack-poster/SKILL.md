@@ -54,7 +54,7 @@ cd /Users/noharakouhei/Downloads/xpost-tech
 source .venv/bin/activate
 
 ANTHROPIC_API_KEY=sk-... \
-python3 .claude/skills/x-slack-poster/scripts/rewrite_top.py \
+python3 scripts/rewrite_top.py \
     --raw-root output/raw \
     --rewrite-root output/rewrites \
     --target-date yesterday \
@@ -72,12 +72,12 @@ python3 .claude/skills/x-slack-poster/scripts/rewrite_top.py \
 ```bash
 # 実際に Slack に投げる
 SLACK_WEBHOOK_URL=https://hooks.slack.com/... \
-python3 .claude/skills/x-slack-poster/scripts/notify_slack.py \
+python3 scripts/notify_slack.py \
     --raw-root output/raw --rewrite-root output/rewrites \
     --target-date yesterday
 
 # Slack に送らず stdout に dump
-python3 .claude/skills/x-slack-poster/scripts/notify_slack.py \
+python3 scripts/notify_slack.py \
     --raw-root output/raw --rewrite-root output/rewrites \
     --target-date yesterday --dry-run
 ```

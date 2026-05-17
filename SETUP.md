@@ -51,7 +51,7 @@ Claude Code で以下のように `/schedule` (もしくは Claude routines の 
 ```
 リポジトリ kocchan/xpost-tech を pull して、以下を実行してください:
 
-1. python3 .claude/skills/x-slack-poster/scripts/rewrite_top.py \
+1. python3 scripts/rewrite_top.py \
      --raw-root output/raw --rewrite-root output/rewrites \
      --target-date yesterday --top 10
 2. 生成された output/rewrites/<日付>/posts.md を git add → commit → push
@@ -83,7 +83,7 @@ python3 -m pip install httpx anthropic
 
 # (1) 収集を「今日」付けで試す
 X_AUTH_TOKEN=xxx X_CT0=yyy \
-python3 .claude/skills/x-collecter/scripts/fetch_x_posts.py \
+python3 scripts/fetch_x_posts.py \
     --config config/accounts.json \
     --target-date yesterday \
     --limit 30 \
@@ -91,12 +91,12 @@ python3 .claude/skills/x-collecter/scripts/fetch_x_posts.py \
 
 # (2) リライト
 ANTHROPIC_API_KEY=sk-... \
-python3 .claude/skills/x-slack-poster/scripts/rewrite_top.py \
+python3 scripts/rewrite_top.py \
     --raw-root output/raw --rewrite-root output/rewrites \
     --target-date yesterday --top 5
 
 # (3) Slack 通知 (dry-run で stdout に出すだけ)
-python3 .claude/skills/x-slack-poster/scripts/notify_slack.py \
+python3 scripts/notify_slack.py \
     --raw-root output/raw --rewrite-root output/rewrites \
     --target-date yesterday --dry-run
 ```

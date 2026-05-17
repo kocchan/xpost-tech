@@ -89,8 +89,8 @@ async def main():
             print(f"  - {tw.likeCount:>6} likes / {snippet}")
         print(f"\n[success] {count} 件取れました。本番運用可能です。")
         print("\n本番取得コマンド:")
-        print("  python3 .claude/skills/x-account-analyzer/scripts/fetch_x_posts.py \\")
-        print("      --config config/accounts.json --out-dir output/raw --source twscrape")
+        print("  python3 scripts/fetch_x_posts.py \\")
+        print("      --config config/accounts.json --out-dir output/raw")
     except Exception as e:
         print(f"[error] テスト取得失敗: {e}")
         print("→ Cookie の値が間違っているか、X 側でセッションが切れている可能性。")

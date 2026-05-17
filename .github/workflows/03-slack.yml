@@ -54,7 +54,7 @@ jobs:
 
       - name: Notify Slack
         run: |
-          python3 .claude/skills/x-slack-poster/scripts/notify_slack.py \
+          python3 scripts/notify_slack.py \
               --raw-root output/raw \
               --rewrite-root output/rewrites \
               --target-date "${{ steps.date.outputs.target_date }}"

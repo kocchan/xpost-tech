@@ -52,18 +52,15 @@ xpost-tech/
 │   ├── 01-collect.yml          ← JST 8:00 収集
 │   ├── 02-rewrite.yml          ← JST 8:45 リライト(routine の保険)
 │   └── 03-slack.yml            ← JST 9:00 Slack 通知
-├── .claude/skills/
-│   ├── x-collecter/            ← 収集 Skill
-│   │   ├── SKILL.md
-│   │   └── scripts/
-│   │       ├── fetch_x_posts.py        ← Cookie 環境変数 + --target-date 対応
-│   │       ├── analyze_posts.py        ← (任意) ランキング md
-│   │       └── setup_twscrape_cookies.py
-│   └── x-slack-poster/         ← リライト + Slack 通知 Skill
-│       ├── SKILL.md
-│       └── scripts/
-│           ├── rewrite_top.py          ← Top N をリライト → posts.md
-│           └── notify_slack.py         ← posts.md + raw_posts.json → Slack
+├── scripts/                    ← 実行スクリプト本体 (GitHub Actions / ローカル両方から叩く)
+│   ├── fetch_x_posts.py        ← Cookie 環境変数 + --target-date 対応
+│   ├── analyze_posts.py        ← (任意) ランキング md
+│   ├── setup_twscrape_cookies.py
+│   ├── rewrite_top.py          ← Top N をリライト → posts.md
+│   └── notify_slack.py         ← posts.md + raw_posts.json → Slack
+├── .claude/skills/             ← Skill メタデータ (使い方ドキュメント) のみ
+│   ├── x-collecter/SKILL.md
+│   └── x-slack-poster/SKILL.md
 ├── config/
 │   └── accounts.json           ← 11 アカウント(core 6 + side_hustle 5)
 ├── doc/

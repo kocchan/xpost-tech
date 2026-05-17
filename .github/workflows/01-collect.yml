@@ -59,7 +59,7 @@ jobs:
 
       - name: Fetch X posts for target date
         run: |
-          python3 .claude/skills/x-collecter/scripts/fetch_x_posts.py \
+          python3 scripts/fetch_x_posts.py \
               --config config/accounts.json \
               --target-date "${{ steps.date.outputs.target_date }}" \
               --limit 100 \

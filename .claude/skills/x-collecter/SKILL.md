@@ -48,7 +48,7 @@ X の Cookie を登録(初回のみ。失効時も同じ手順):
 ```bash
 # ブラウザで X にログイン → DevTools → Application → Cookies → https://x.com
 # auth_token と ct0 の値をコピー
-python3 .claude/skills/x-collecter/scripts/setup_twscrape_cookies.py
+python3 scripts/setup_twscrape_cookies.py
 ```
 
 elonmusk の最新 3 投稿が取れれば成功。Cookie は `~/.config/twscrape/accounts.db` に保存。
@@ -82,20 +82,20 @@ cd /Users/noharakouhei/Downloads/xpost-tech
 source .venv/bin/activate
 
 # JST 昨日の投稿のみ → output/raw/<yesterday>/raw_posts.json
-python3 .claude/skills/x-collecter/scripts/fetch_x_posts.py \
+python3 scripts/fetch_x_posts.py \
     --config config/accounts.json \
     --target-date yesterday \
     --out-dir output/raw
 
 # (任意) ランキングレポートが欲しい場合
-python3 .claude/skills/x-collecter/scripts/analyze_posts.py \
+python3 scripts/analyze_posts.py \
     --from-dir output/raw --out-dir output/analysis --top 10
 ```
 
 単発調査(特定アカウントだけ見たいとき):
 
 ```bash
-python3 .claude/skills/x-collecter/scripts/fetch_x_posts.py \
+python3 scripts/fetch_x_posts.py \
     SuguruKun_ai --limit 30 --out-dir output/raw
 ```
 

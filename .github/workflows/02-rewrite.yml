@@ -75,7 +75,7 @@ jobs:
       - name: Run rewrite
         if: steps.check.outputs.skip != 'true'
         run: |
-          python3 .claude/skills/x-slack-poster/scripts/rewrite_top.py \
+          python3 scripts/rewrite_top.py \
               --raw-root output/raw \
               --rewrite-root output/rewrites \
               --target-date "${{ steps.date.outputs.target_date }}" \

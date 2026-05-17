@@ -11,7 +11,7 @@ rewrite_top.py が生成した posts.md と、その元になった raw_posts.js
 を投げる。10 件あれば 10 メッセージ。
 
 使用例:
-    python3 .claude/skills/x-slack-poster/scripts/notify_slack.py \
+    python3 scripts/notify_slack.py \
         --raw-root output/raw --rewrite-root output/rewrites --target-date yesterday
 
 環境変数:
