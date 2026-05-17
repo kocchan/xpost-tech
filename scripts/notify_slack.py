@@ -102,26 +102,30 @@ def find_source_post(raw: dict, url: str) -> dict | None:
 
 
 def build_blocks(item: dict, source: dict | None, idx: int, total: int) -> list[dict]:
-    """Slack Block Kit でメッセージを組み立て。画像 URL はそのまま image ブロックで貼る。"""
+    """Slack Block Kit でメッセージを組み立て。
+    rewrite が "---" 区切りでスレッド形式の場合、各ツイートを別 section に分けて表示する。"""
+    rewrite = item["rewrite"]
+    parts = [p.strip() for p in re.split(r"\n\s*---\s*\n", rewrite) if p.strip()]
+
+    header = (
+        f":bulb: *AI 副業リライト案 {idx}/{total}* "
+        f"(score={item['score']} / {item['author']})"
+    )
     blocks: list[dict] = [
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": (
-                    f":bulb: *AI 副業リライト案 {idx}/{total}* "
-                    f"(score={item['score']} / {item['author']})\n"
-                    f"```\n{item['rewrite']}\n```"
-                ),
-            },
-        },
-        {
-            "type": "context",
-            "elements": [
-                {"type": "mrkdwn", "text": f"元投稿: <{item['url']}>"},
-            ],
-        },
+        {"type": "section", "text": {"type": "mrkdwn", "text": header}},
     ]
+    for i, part in enumerate(parts, start=1):
+        prefix = f"*メインツイート*" if i == 1 else f"*スレッド {i}/{len(parts)}*"
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"{prefix}\n```\n{part}\n```"},
+        })
+    blocks.append({
+        "type": "context",
+        "elements": [
+            {"type": "mrkdwn", "text": f"元投稿: <{item['url']}>"},
+        ],
+    })
     if source:
         media = source.get("media_urls", []) or []
         for url in media[:4]:
