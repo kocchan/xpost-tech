@@ -52,6 +52,12 @@ _X_BEARER = (
 _X_OPS = {
     "user": "1VOOyvKkiI3FMmkeDNxM9A/UserByScreenName",
     "tweets": "HeWHY26ItCfUmm1e6ITjeA/UserTweets",
+    # UserTweetsAndReplies: with_replies タブ相当(セルフリプライを含むため使う)
+    # X 側で時々ローテーションするので壊れたら更新する。取得方法:
+    #   ブラウザで https://x.com/<account>/with_replies を開く →
+    #   DevTools → Network → "UserTweetsAndReplies" でフィルタ → 任意のリクエストの
+    #   Request URL の /graphql/<ここ>/UserTweetsAndReplies を読み取って下記を差し替え
+    "tweets_and_replies": "D5eKzDa5ZoJuC1TCeAXbWA/UserTweetsAndReplies",
 }
 _X_FEATURES_USER = {
     "hidden_profile_likes_enabled": True,
@@ -105,6 +111,50 @@ _X_FEATURES_TWEETS = {
     "responsive_web_graphql_skip_user_profile_image_extensions_enabled": False,
 }
 
+# UserTweetsAndReplies は features セットが UserTweets と異なる(2026-05 時点で X が
+# デプロイしている形)。ブラウザの GraphQL リクエストから抜き出した最新形を使う。
+_X_FEATURES_TWEETS_AND_REPLIES = {
+    "rweb_video_screen_enabled": False,
+    "rweb_cashtags_enabled": True,
+    "profile_label_improvements_pcf_label_in_post_enabled": True,
+    "responsive_web_profile_redirect_enabled": False,
+    "rweb_tipjar_consumption_enabled": False,
+    "verified_phone_label_enabled": False,
+    "creator_subscriptions_tweet_preview_api_enabled": True,
+    "responsive_web_graphql_timeline_navigation_enabled": True,
+    "responsive_web_graphql_skip_user_profile_image_extensions_enabled": False,
+    "premium_content_api_read_enabled": False,
+    "communities_web_enable_tweet_community_results_fetch": True,
+    "c9s_tweet_anatomy_moderator_badge_enabled": True,
+    "responsive_web_grok_analyze_button_fetch_trends_enabled": False,
+    "responsive_web_grok_analyze_post_followups_enabled": True,
+    "rweb_cashtags_composer_attachment_enabled": True,
+    "responsive_web_jetfuel_frame": True,
+    "responsive_web_grok_share_attachment_enabled": True,
+    "responsive_web_grok_annotations_enabled": True,
+    "articles_preview_enabled": True,
+    "responsive_web_edit_tweet_api_enabled": True,
+    "rweb_conversational_replies_downvote_enabled": False,
+    "graphql_is_translatable_rweb_tweet_is_translatable_enabled": True,
+    "view_counts_everywhere_api_enabled": True,
+    "longform_notetweets_consumption_enabled": True,
+    "responsive_web_twitter_article_tweet_consumption_enabled": True,
+    "content_disclosure_indicator_enabled": True,
+    "content_disclosure_ai_generated_indicator_enabled": True,
+    "responsive_web_grok_show_grok_translated_post": True,
+    "responsive_web_grok_analysis_button_from_backend": True,
+    "post_ctas_fetch_enabled": True,
+    "freedom_of_speech_not_reach_fetch_enabled": True,
+    "standardized_nudges_misinfo": True,
+    "tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled": True,
+    "longform_notetweets_rich_text_read_enabled": True,
+    "longform_notetweets_inline_media_enabled": False,
+    "responsive_web_grok_image_annotation_enabled": True,
+    "responsive_web_grok_imagine_annotation_enabled": True,
+    "responsive_web_grok_community_note_auto_translation_is_enabled": True,
+    "responsive_web_enhance_cards_enabled": False,
+}
+
 
 def _load_cookies() -> dict:
     """X_AUTH_TOKEN + X_CT0 環境変数を優先。なければ twscrape DB の最初のアクティブアカウントから。"""
@@ -138,6 +188,7 @@ def _load_cookies() -> dict:
 
 
 def _build_headers(ct0: str) -> dict:
+    import uuid
     return {
         "Authorization": _X_BEARER,
         "x-csrf-token": ct0,
@@ -147,7 +198,12 @@ def _build_headers(ct0: str) -> dict:
         ),
         "x-twitter-active-user": "yes",
         "x-twitter-auth-type": "OAuth2Session",
+        "x-twitter-client-language": "ja",
+        "x-client-uuid": str(uuid.uuid4()),
         "Accept": "*/*",
+        "Accept-Language": "ja,en-US;q=0.9",
+        "Origin": "https://x.com",
+        "Referer": "https://x.com/",
     }
 
 
@@ -156,9 +212,14 @@ def fetch_posts(
     limit: int,
     since_days: int | None,
     target_date_jst: str | None = None,
+    include_replies: bool = False,
 ) -> dict[str, list[dict]]:
     """target_date_jst (YYYY-MM-DD) が指定されると、JST その日の 0:00-23:59 のみ採取。
-    since_days と target_date_jst が両方指定された場合は target_date_jst を優先。"""
+    since_days と target_date_jst が両方指定された場合は target_date_jst を優先。
+
+    include_replies=True の場合 UserTweetsAndReplies を叩く (セルフリプライ込み)。
+    2026-05 時点で X 側 anti-bot (x-client-transaction-id 必須化) により 404 する。
+    対応待ちのためデフォルト OFF。"""
     try:
         import httpx
     except ImportError:
@@ -206,7 +267,9 @@ def fetch_posts(
                 results[handle] = []
                 continue
 
-            # 2. UserTweets(ピン重複・rate limit を考慮してページング)
+            # 2. UserTweets / UserTweetsAndReplies (ピン重複・rate limit を考慮してページング)
+            op_key = "tweets_and_replies" if include_replies else "tweets"
+            op_label = _X_OPS[op_key].split("/")[-1]
             tweets: list[dict] = []
             seen_ids: set[str] = set()
             cursor = None
@@ -216,26 +279,53 @@ def fetch_posts(
             while len(tweets) < limit and page_count < max_pages:
                 page_count += 1
                 try:
-                    v = {
-                        "userId": user_id,
-                        "count": min(40, limit),
-                        "includePromotedContent": True,
-                        "withQuickPromoteEligibilityTweetFields": True,
-                        "withVoice": True,
-                        "withV2Timeline": True,
-                    }
-                    if cursor:
-                        v["cursor"] = cursor
-                    params = {"variables": json.dumps(v), "features": json.dumps(_X_FEATURES_TWEETS)}
-                    r = client.get(f"https://x.com/i/api/graphql/{_X_OPS['tweets']}", params=params)
+                    # X 側が URL ベースで何かチェックしている可能性があるので、
+                    # ブラウザと同じく compact JSON (空白なし) で送る
+                    _dumps = lambda d: json.dumps(d, separators=(",", ":"))
+                    if include_replies:
+                        v = {
+                            "userId": user_id,
+                            "count": min(40, limit),
+                            "includePromotedContent": True,
+                            "withCommunity": True,
+                            "withVoice": True,
+                        }
+                        if cursor:
+                            v["cursor"] = cursor
+                        params = {
+                            "variables": _dumps(v),
+                            "features": _dumps(_X_FEATURES_TWEETS_AND_REPLIES),
+                            "fieldToggles": _dumps({"withArticlePlainText": False}),
+                        }
+                    else:
+                        v = {
+                            "userId": user_id,
+                            "count": min(40, limit),
+                            "includePromotedContent": True,
+                            "withQuickPromoteEligibilityTweetFields": True,
+                            "withVoice": True,
+                            "withV2Timeline": True,
+                        }
+                        if cursor:
+                            v["cursor"] = cursor
+                        params = {"variables": _dumps(v), "features": _dumps(_X_FEATURES_TWEETS)}
+                    r = client.get(f"https://x.com/i/api/graphql/{_X_OPS[op_key]}", params=params)
                     r.raise_for_status()
                     page_tweets, next_cursor = _parse_user_tweets(r.json(), handle)
                 except Exception as e:
-                    print(f"    UserTweets 失敗: {type(e).__name__}: {e}", file=sys.stderr)
+                    print(f"    {op_label} 失敗: {type(e).__name__}: {e}", file=sys.stderr)
+                    if include_replies and page_count == 1:
+                        print(
+                            f"    → クエリ ID '{_X_OPS['tweets_and_replies']}' が無効な可能性。"
+                            f"ブラウザで x.com/{handle}/with_replies を開いて DevTools → Network → "
+                            f"UserTweetsAndReplies の URL を確認し、_X_OPS['tweets_and_replies'] を更新してください。",
+                            file=sys.stderr,
+                        )
                     break
 
                 stop = False
                 added = 0
+                filtered_too_new = 0
                 for t in page_tweets:
                     if t["id"] in seen_ids:
                         continue
@@ -244,7 +334,8 @@ def fetch_posts(
                         try:
                             t_dt = datetime.fromisoformat(t["time"].replace("Z", "+00:00"))
                             if upper and t_dt >= upper:
-                                # target date より新しい投稿はスキップ(まだ範囲外、続けて古い方を探す)
+                                # target date より新しい投稿はスキップ(窓に届くまでページングを続ける)
+                                filtered_too_new += 1
                                 continue
                             if cutoff and t_dt < cutoff:
                                 stop = True
@@ -257,7 +348,13 @@ def fetch_posts(
                         stop = True
                         break
 
-                consecutive_empty_pages = consecutive_empty_pages + 1 if added == 0 else 0
+                # 「全部 too-new でスキップ」されたページは「窓へ向かってスクロール中」なので
+                # consecutive_empty にはカウントしない(target-date モードでアクティブアカウントを
+                # 取りこぼさないため)
+                if added == 0 and filtered_too_new == 0:
+                    consecutive_empty_pages += 1
+                else:
+                    consecutive_empty_pages = 0
                 if stop or not next_cursor or consecutive_empty_pages >= 3:
                     break
 
@@ -269,30 +366,44 @@ def fetch_posts(
 
 
 def _parse_user_tweets(payload: dict, fallback_handle: str) -> tuple[list[dict], str | None]:
-    """UserTweets レスポンスから投稿リストと次ページの cursor を抽出。"""
+    """UserTweets / UserTweetsAndReplies レスポンスから投稿リストと次ページの cursor を抽出。
+
+    UserTweetsAndReplies はセルフスレッドを TimelineTimelineModule (会話チャンク) で
+    返してくることがあるので、それも展開する。"""
     out: list[dict] = []
     next_cursor: str | None = None
 
+    # 新旧両方のパスを試す: timeline.timeline.instructions (旧) と timeline_v2.timeline.instructions
+    data_user = payload.get("data", {}).get("user", {}).get("result", {})
     instrs = (
-        payload.get("data", {})
-        .get("user", {})
-        .get("result", {})
-        .get("timeline", {})
-        .get("timeline", {})
-        .get("instructions", [])
+        data_user.get("timeline", {}).get("timeline", {}).get("instructions")
+        or data_user.get("timeline_v2", {}).get("timeline", {}).get("instructions")
+        or []
     )
+
+    def _extract_tweet_from_item(item: dict) -> dict | None:
+        if item.get("itemType") != "TimelineTweet":
+            return None
+        return _normalize_x_tweet(
+            item.get("tweet_results", {}).get("result", {}), fallback_handle
+        )
+
     for instr in instrs:
         itype = instr.get("type")
         if itype == "TimelineAddEntries":
             for entry in instr.get("entries", []):
                 eid = entry.get("entryId", "")
                 content = entry.get("content", {})
-                if content.get("entryType") == "TimelineTimelineItem":
-                    item = content.get("itemContent", {})
-                    if item.get("itemType") == "TimelineTweet":
-                        tw = _normalize_x_tweet(
-                            item.get("tweet_results", {}).get("result", {}), fallback_handle
-                        )
+                etype = content.get("entryType")
+                if etype == "TimelineTimelineItem":
+                    tw = _extract_tweet_from_item(content.get("itemContent", {}))
+                    if tw:
+                        out.append(tw)
+                elif etype == "TimelineTimelineModule":
+                    # セルフスレッド: items[*].item.itemContent に各ツイート
+                    for item_wrap in content.get("items", []):
+                        item = item_wrap.get("item", {}).get("itemContent", {})
+                        tw = _extract_tweet_from_item(item)
                         if tw:
                             out.append(tw)
                 if eid.startswith("cursor-bottom-"):
@@ -300,13 +411,9 @@ def _parse_user_tweets(payload: dict, fallback_handle: str) -> tuple[list[dict],
         elif itype == "TimelinePinEntry":
             ent = instr.get("entry", {})
             content = ent.get("content", {})
-            item = content.get("itemContent", {})
-            if item.get("itemType") == "TimelineTweet":
-                tw = _normalize_x_tweet(
-                    item.get("tweet_results", {}).get("result", {}), fallback_handle
-                )
-                if tw:
-                    out.append(tw)
+            tw = _extract_tweet_from_item(content.get("itemContent", {}))
+            if tw:
+                out.append(tw)
     return out, next_cursor
 
 
@@ -391,11 +498,13 @@ def _normalize_x_tweet(node: dict, fallback_handle: str) -> dict | None:
         "bookmarks": int(legacy.get("bookmark_count", 0) or 0),
         "media_urls": media_urls,
         "is_reply": bool(in_reply_id),
+        "is_self_reply": bool(in_reply_screen and in_reply_screen.lower() == (username or "").lower()),
         "is_retweet": bool(rt_node),
         "is_quote": bool(quoted_id),
         "quoted_url": quoted_url,
         "in_reply_to_url": in_reply_url,
         "in_reply_to_screen": in_reply_screen,
+        "in_reply_to_status_id": legacy.get("in_reply_to_status_id_str"),
         "retweeted_url": rt_url,
         "retweeted_screen": rt_screen,
         "urls_in_text": [
@@ -447,6 +556,10 @@ def main():
     ap.add_argument("--out-dir", type=str, default=None,
                     help="<out-dir>/<JST 日付>/raw_posts.json に書き出す。"
                          "--target-date 指定時はその日のフォルダ、未指定なら今日のフォルダ。")
+    ap.add_argument("--include-replies", action="store_true",
+                    help="UserTweetsAndReplies を叩いてセルフリプライ(セルフスレッドの続き)まで採取する。"
+                         "2026-05 時点で X 側 anti-bot により 404 することが確認されているため、"
+                         "デフォルトは OFF。tweety / twscrape 側が transaction-id 対応した時点で有効化する。")
     args = ap.parse_args()
 
     target_date = args.target_date
@@ -483,9 +596,18 @@ def main():
         since_label = f"target-date={target_date} JST"
     else:
         since_label = f"{since_days}d" if since_days is not None else "all (latest only)"
-    print(f"[mode: x_direct / limit={limit}/acct / since={since_label}]", file=sys.stderr)
+    include_replies = args.include_replies
+    print(
+        f"[mode: x_direct / limit={limit}/acct / since={since_label} / "
+        f"endpoint={'UserTweetsAndReplies' if include_replies else 'UserTweets'}]",
+        file=sys.stderr,
+    )
 
-    results = fetch_posts(handles, limit, since_days, target_date_jst=target_date)
+    results = fetch_posts(
+        handles, limit, since_days,
+        target_date_jst=target_date,
+        include_replies=include_replies,
+    )
     payload = json.dumps(results, ensure_ascii=False, indent=2)
 
     if args.out_dir:

@@ -72,11 +72,17 @@ def engagement_score(p: dict) -> int:
 
 
 def pick_top(raw: dict, top_n: int) -> list[dict]:
-    """raw_posts.json を flatten してスコア順に Top N。RT/reply は除外。"""
+    """raw_posts.json を flatten してスコア順に Top N。
+
+    - RT は対象 (引用元のオリジナル本文を素材化)
+    - セルフリプライは対象 (自分のセルフスレッドの各ツイートを素材化)
+    - 他人へのリプライは除外 (会話の断片でリライト素材として薄い)
+    - 引用ツイートは対象
+    """
     flat = []
     for posts in raw.values():
         for p in posts:
-            if p.get("is_retweet") or p.get("is_reply"):
+            if p.get("is_reply") and not p.get("is_self_reply"):
                 continue
             flat.append(p)
     flat.sort(key=engagement_score, reverse=True)
