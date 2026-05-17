@@ -31,6 +31,10 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 
+from _env import load_dotenv
+
+load_dotenv()  # ローカル実行時に .env を読む。GitHub Actions では Secrets が来るので no-op
+
 # Cookie が保管された SQLite。setup_twscrape_cookies.py が書き込む。
 TWSCRAPE_DB = os.environ.get(
     "TWSCRAPE_DB", os.path.expanduser("~/.config/twscrape/accounts.db")

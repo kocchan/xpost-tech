@@ -62,7 +62,7 @@ gh secret set SLACK_WEBHOOK_URL --repo kocchan/xpost-tech \
 
 ## 4. 動作確認
 
-### GitHub 上で手動キック(推奨)
+### A. GitHub 上で手動キック(推奨)
 
 <https://github.com/kocchan/xpost-tech/actions> の Actions タブで、上から順に Run workflow:
 
@@ -71,31 +71,41 @@ gh secret set SLACK_WEBHOOK_URL --repo kocchan/xpost-tech \
 3. **03 Notify Slack** → 完了を待つ
 4. Slack に 10 通リライト案が届けば成功
 
-### 手元で動かす場合
+### B. 手元で動かす場合 (.env を使う)
+
+ローカルで叩く場合は `.env` に API キーを書いておけば各スクリプトが自動で読む。
+GitHub Secrets と環境変数名は同じなので 1 ファイルで両方の運用に対応できる。
 
 ```bash
-# venv に依存を入れる
-python3 -m pip install httpx anthropic
+# 1) .env を用意 (初回のみ)
+cp .env.example .env
+# .env を編集して X_AUTH_TOKEN / X_CT0 / ANTHROPIC_API_KEY / SLACK_WEBHOOK_URL を埋める
 
-# (1) 収集
-X_AUTH_TOKEN=xxx X_CT0=yyy \
+# 2) venv に依存を入れる
+python3 -m venv .venv
+source .venv/bin/activate
+pip install httpx anthropic
+
+# 3) 収集
 python3 scripts/fetch_x_posts.py \
     --config config/accounts.json \
     --target-date yesterday \
     --limit 30 \
     --out-dir output/raw
 
-# (2) リライト
-ANTHROPIC_API_KEY=sk-... \
+# 4) リライト
 python3 scripts/rewrite_top.py \
     --raw-root output/raw --rewrite-root output/rewrites \
     --target-date yesterday --top 5
 
-# (3) Slack 通知 (dry-run で stdout に出すだけ)
+# 5) Slack 通知 (dry-run で stdout に出すだけ)
 python3 scripts/notify_slack.py \
     --raw-root output/raw --rewrite-root output/rewrites \
     --target-date yesterday --dry-run
 ```
+
+> 既に環境変数が export 済みの場合は `.env` の値で **上書きされない**(env が優先)。
+> CI と手元で挙動が変わらないよう、`.env` は「手元のデフォルト」として扱う設計。
 
 ## 5. 画像 / 動画の取り扱いについて(重要)
 

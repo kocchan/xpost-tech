@@ -26,6 +26,10 @@ from datetime import datetime, timedelta, timezone
 
 import anthropic
 
+from _env import load_dotenv
+
+load_dotenv()  # ローカル実行時に .env を読む。GitHub Actions では Secrets が来るので no-op
+
 MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 1024
 
