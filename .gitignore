@@ -4,9 +4,10 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Local secrets
+# Local secrets (but keep .env.example as a template)
 .env
 .env.*
+!.env.example
 
 # Claude Code local-only settings (project-shared settings.json は別途必要なら追加)
 .claude/settings.local.json
